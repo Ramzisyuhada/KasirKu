@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app_database.dart';
 
-/// Satu database untuk seluruh aplikasi.
 final appDatabaseProvider = Provider<AppDatabase>((ref) {
   final db = AppDatabase();
   ref.onDispose(db.close);
@@ -11,6 +10,10 @@ final appDatabaseProvider = Provider<AppDatabase>((ref) {
 
 final productsProvider = StreamProvider<List<Product>>((ref) {
   return ref.watch(appDatabaseProvider).watchProducts();
+});
+
+final categoriesProvider = StreamProvider<List<ProductCategory>>((ref) {
+  return ref.watch(appDatabaseProvider).watchCategories();
 });
 
 final stockByProductProvider = StreamProvider<Map<String, int>>((ref) {
