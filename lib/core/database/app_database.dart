@@ -7,6 +7,23 @@ import 'tables.dart';
 
 part 'app_database.g.dart';
 
+/// Satu baris barang yang akan dijual (dari keranjang).
+class SaleLine {
+  const SaleLine({
+    required this.productId,
+    required this.productName,
+    required this.price,
+    required this.costPrice,
+    required this.qty,
+  });
+
+  final String productId;
+  final String productName;
+  final int price;
+  final int costPrice;
+  final int qty;
+}
+
 @DriftDatabase(tables: [
   Categories,
   Products,
@@ -55,10 +72,8 @@ class AppDatabase extends _$AppDatabase {
     return (select(products)..where((p) => p.id.equals(id))).getSingleOrNull();
   }
 
-  /// Dipakai nanti di layar Kasir saat scan barcode.
   Future<Product?> findByBarcode(String barcode) {
-    return (select(products)
-          ..where((p) => p.barcode.equals(barcode) & p.deletedAt.isNull()))
+    return (select(products)..where((p) => p.barcode.equals(barcode) & p.deletedAt.isNull()))
         .getSingleOrNull();
   }
 
@@ -119,8 +134,6 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
-  /// Ubah produk. Kalau [newStock] diisi dan berbeda dari stok sekarang,
-  /// dibuat pergerakan stok 'adjust' sebesar selisihnya.
   Future<void> updateProduct({
     required Product product,
     required String name,
@@ -156,7 +169,6 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
-  /// Hapus "lunak": data tetap ada, hanya ditandai deleted_at.
   Future<void> softDeleteProduct(Product product) {
     return transaction(() async {
       final deleted = product.copyWith(
@@ -169,13 +181,103 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
-  Future<void> _addMovement(String storeId, String productId, String type, int qtyDelta) async {
+  // ================= Transaksi penjualan =================
+
+  /// Simpan penjualan dalam SATU database transaction:
+  /// transaksi + item + pengurangan stok + antrean sinkron.
+  Future<TransactionData> createSale({
+    required String storeId,
+    required String cashierId,
+    required String deviceId,
+    required String deviceCode,
+    required List<SaleLine> lines,
+    required int discount,
+    required int paid,
+    required String paymentMethod,
+  }) {
+    return transaction(() async {
+      final seq = await _countTransactionsOfDevice(deviceId) + 1;
+      final invoiceNo = '$deviceCode-${seq.toString().padLeft(6, '0')}';
+
+      final subtotal = lines.fold<int>(0, (sum, l) => sum + l.price * l.qty);
+      final total = (subtotal - discount).clamp(0, subtotal);
+      final change = paymentMethod == 'cash' ? (paid - total).clamp(0, paid) : 0;
+
+      final trx = await into(transactions).insertReturning(
+        TransactionsCompanion.insert(
+          storeId: storeId,
+          cashierId: cashierId,
+          deviceId: deviceId,
+          invoiceNo: invoiceNo,
+          subtotal: subtotal,
+          discount: Value(discount),
+          total: total,
+          paid: paid,
+          change: Value(change),
+          paymentMethod: Value(paymentMethod),
+        ),
+      );
+      await _enqueue('transactions', trx.id, 'insert', trx.toJson());
+
+      for (final line in lines) {
+        final item = await into(transactionItems).insertReturning(
+          TransactionItemsCompanion.insert(
+            storeId: storeId,
+            transactionId: trx.id,
+            productId: Value(line.productId),
+            productName: line.productName,
+            price: line.price,
+            costPrice: Value(line.costPrice),
+            qty: line.qty,
+          ),
+        );
+        await _enqueue('transaction_items', item.id, 'insert', item.toJson());
+        await _addMovement(storeId, line.productId, 'sale', -line.qty, refId: trx.id);
+      }
+      return trx;
+    });
+  }
+
+  Stream<List<TransactionData>> watchTransactionsBetween(DateTime from, DateTime to) {
+    return (select(transactions)
+          ..where((t) => t.createdAt.isBiggerOrEqualValue(from) & t.createdAt.isSmallerThanValue(to))
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+        .watch();
+  }
+
+  Future<TransactionData?> getTransaction(String id) {
+    return (select(transactions)..where((t) => t.id.equals(id))).getSingleOrNull();
+  }
+
+  Future<List<TransactionItem>> getTransactionItems(String transactionId) {
+    return (select(transactionItems)..where((i) => i.transactionId.equals(transactionId))).get();
+  }
+
+  Future<int> _countTransactionsOfDevice(String deviceId) async {
+    final count = transactions.id.count();
+    final query = selectOnly(transactions)
+      ..addColumns([count])
+      ..where(transactions.deviceId.equals(deviceId));
+    final row = await query.getSingle();
+    return row.read(count) ?? 0;
+  }
+
+  // ================= Pergerakan stok =================
+
+  Future<void> _addMovement(
+    String storeId,
+    String productId,
+    String type,
+    int qtyDelta, {
+    String? refId,
+  }) async {
     final movement = await into(stockMovements).insertReturning(
       StockMovementsCompanion.insert(
         storeId: storeId,
         productId: productId,
         type: type,
         qtyDelta: qtyDelta,
+        refId: Value(refId),
       ),
     );
     await _enqueue('stock_movements', movement.id, 'insert', movement.toJson());
