@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-/// Kerangka 4 tab: Kasir · Riwayat · Produk · Laporan.
-class HomeShell extends StatelessWidget {
+import 'package:kasirku/sync/sync_controller.dart';
+
+/// Kerangka 4 tab. Selama layar ini tampil (user sudah login & punya toko),
+/// sync controller tetap hidup dan berjalan di latar belakang.
+class HomeShell extends ConsumerWidget {
   const HomeShell({super.key, required this.shell});
 
   final StatefulNavigationShell shell;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(syncControllerProvider); // menyalakan sinkron otomatis
+
     return Scaffold(
       body: shell,
       bottomNavigationBar: NavigationBar(

@@ -122,7 +122,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
           ],
         ),
         actions: [
-          SyncChip(pending: pending),
+          SyncChip(),
           PopupMenuButton<String>(
             onSelected: (v) {
               if (v == 'invite') _createInvite();
