@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:kasirku/core/database/app_database.dart';
 import 'package:kasirku/core/database/database_provider.dart';
@@ -64,10 +65,10 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => CartSheet(
+      builder: (sheetContext) => CartSheet(
         onCheckout: () {
-          Navigator.pop(context);
-          _snack('Layar Pembayaran dibuat di fitur berikutnya (feat/payment).');
+          Navigator.pop(sheetContext); // tutup lembar keranjang
+          context.push('/pembayaran'); // buka layar Pembayaran
         },
       ),
     );
@@ -81,8 +82,10 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Kode undangan kasir'),
-          content: SelectableText(code,
-              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w700, letterSpacing: 4)),
+          content: SelectableText(
+            code,
+            style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w700, letterSpacing: 4),
+          ),
           actions: [
             TextButton(
               onPressed: () => Clipboard.setData(ClipboardData(text: code)),
@@ -137,7 +140,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
         children: [
           Column(
             children: [
-              // Pencarian + tombol scan
+              // ---------- Pencarian + scan ----------
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                 child: Row(
@@ -167,7 +170,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
                   ],
                 ),
               ),
-              // Filter kategori
+
+              // ---------- Filter kategori ----------
               SizedBox(
                 height: 44,
                 child: ListView(
@@ -194,7 +198,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
                   ],
                 ),
               ),
-              // Grid produk
+
+              // ---------- Grid produk ----------
               Expanded(
                 child: productsAsync.when(
                   loading: () => const Center(child: CircularProgressIndicator()),
@@ -202,9 +207,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
                   data: (all) {
                     final q = _query.toLowerCase();
                     final list = all.where((p) {
-                      final matchQuery = q.isEmpty ||
-                          p.name.toLowerCase().contains(q) ||
-                          (p.barcode ?? '').contains(q);
+                      final matchQuery =
+                          q.isEmpty || p.name.toLowerCase().contains(q) || (p.barcode ?? '').contains(q);
                       final matchCategory = _categoryId == null || p.categoryId == _categoryId;
                       return matchQuery && matchCategory;
                     }).toList();
@@ -244,7 +248,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> {
               ),
             ],
           ),
-          // Bar keranjang
+
+          // ---------- Bar keranjang ----------
           if (!cart.isEmpty)
             Positioned(
               left: 16,

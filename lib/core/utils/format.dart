@@ -20,3 +20,23 @@ String initials(String name) {
 
 /// "3.500" atau "3500" → 3500
 int parseRupiah(String text) => int.tryParse(text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+
+const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+
+String _two(int n) => n.toString().padLeft(2, '0');
+
+/// 24 Nov 2026
+String formatDate(DateTime d) => '${d.day} ${_months[d.month - 1]} ${d.year}';
+
+/// 09.41
+String formatTime(DateTime d) => '${_two(d.hour)}.${_two(d.minute)}';
+
+/// 24 Nov 2026, 09.41
+String formatDateTime(DateTime d) => '${formatDate(d)}, ${formatTime(d)}';
+
+String paymentLabel(String method) => switch (method) {
+      'cash' => 'Tunai',
+      'qris' => 'QRIS',
+      'transfer' => 'Transfer',
+      _ => method,
+    };

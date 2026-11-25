@@ -14,7 +14,9 @@ import 'package:kasirku/features/cart/presentation/kasir_screen.dart';
 import 'package:kasirku/features/product/presentation/product_form_screen.dart';
 import 'package:kasirku/features/product/presentation/product_list_screen.dart';
 import 'package:kasirku/features/report/presentation/laporan_screen.dart';
+import 'package:kasirku/features/transaction/presentation/payment_screen.dart';
 import 'package:kasirku/features/transaction/presentation/riwayat_screen.dart';
+import 'package:kasirku/features/transaction/presentation/transaction_detail_screen.dart';
 
 class AppRoutes {
   static const splash = '/splash';
@@ -24,8 +26,10 @@ class AppRoutes {
   static const riwayat = '/riwayat';
   static const produk = '/produk';
   static const laporan = '/laporan';
+  static const pembayaran = '/pembayaran';
 }
 
+/// Mendengarkan status login + profil, lalu menyuruh router cek ulang redirect.
 class RouterNotifier extends ChangeNotifier {
   RouterNotifier(this._ref) {
     _authSub = _ref.read(authRepositoryProvider).authChanges.listen((_) {
@@ -42,19 +46,23 @@ class RouterNotifier extends ChangeNotifier {
     final loc = state.matchedLocation;
     final loggedIn = _ref.read(authRepositoryProvider).isLoggedIn;
 
+    // 1. Belum login → Login
     if (!loggedIn) return loc == AppRoutes.login ? null : AppRoutes.login;
 
+    // 2. Profil masih dimuat / gagal → Splash
     final profileAsync = _ref.read(myProfileProvider);
     final data = profileAsync.asData;
     if (profileAsync.hasError || data == null) {
       return loc == AppRoutes.splash ? null : AppRoutes.splash;
     }
 
+    // 3. Belum punya toko → Buat/Gabung Toko
     final hasStore = data.value?.hasStore ?? false;
     if (!hasStore) {
       return loc == AppRoutes.createStore ? null : AppRoutes.createStore;
     }
 
+    // 4. Sudah punya toko tapi masih di layar awal → Kasir
     if (loc == AppRoutes.login || loc == AppRoutes.splash || loc == AppRoutes.createStore) {
       return AppRoutes.kasir;
     }
@@ -76,25 +84,42 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: notifier,
     redirect: notifier.redirect,
     routes: [
+      // ---------- Layar awal ----------
       GoRoute(path: AppRoutes.splash, builder: (_, __) => const SplashScreen()),
       GoRoute(path: AppRoutes.login, builder: (_, __) => const LoginScreen()),
       GoRoute(path: AppRoutes.createStore, builder: (_, __) => const CreateStoreScreen()),
 
-      // Form produk tampil penuh (tanpa bottom nav)
+      // ---------- Layar penuh (tanpa bottom nav) ----------
       GoRoute(path: '/produk/tambah', builder: (_, __) => const ProductFormScreen()),
       GoRoute(
         path: '/produk/edit/:id',
         builder: (_, state) => ProductFormScreen(productId: state.pathParameters['id']),
       ),
+      GoRoute(path: AppRoutes.pembayaran, builder: (_, __) => const PaymentScreen()),
+      GoRoute(
+        path: '/transaksi/:id',
+        builder: (_, state) => TransactionDetailScreen(
+          id: state.pathParameters['id']!,
+          isNew: state.uri.queryParameters['baru'] == '1',
+        ),
+      ),
 
-      // 4 tab dengan bottom nav
+      // ---------- 4 tab dengan bottom nav ----------
       StatefulShellRoute.indexedStack(
         builder: (_, __, shell) => HomeShell(shell: shell),
         branches: [
-          StatefulShellBranch(routes: [GoRoute(path: AppRoutes.kasir, builder: (_, __) => const KasirScreen())]),
-          StatefulShellBranch(routes: [GoRoute(path: AppRoutes.riwayat, builder: (_, __) => const RiwayatScreen())]),
-          StatefulShellBranch(routes: [GoRoute(path: AppRoutes.produk, builder: (_, __) => const ProductListScreen())]),
-          StatefulShellBranch(routes: [GoRoute(path: AppRoutes.laporan, builder: (_, __) => const LaporanScreen())]),
+          StatefulShellBranch(routes: [
+            GoRoute(path: AppRoutes.kasir, builder: (_, __) => const KasirScreen()),
+          ]),
+          StatefulShellBranch(routes: [
+            GoRoute(path: AppRoutes.riwayat, builder: (_, __) => const RiwayatScreen()),
+          ]),
+          StatefulShellBranch(routes: [
+            GoRoute(path: AppRoutes.produk, builder: (_, __) => const ProductListScreen()),
+          ]),
+          StatefulShellBranch(routes: [
+            GoRoute(path: AppRoutes.laporan, builder: (_, __) => const LaporanScreen()),
+          ]),
         ],
       ),
     ],
